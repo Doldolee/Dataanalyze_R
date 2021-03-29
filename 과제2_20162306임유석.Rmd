@@ -74,7 +74,12 @@ ggplot(plotdata, aes(x=PersonalLoan, y=n))+geom_bar(stat="identity")+labs(x="사
 Bank_test_pred <- knn(train = Bank_train, test = Bank_test, cl = Bank_train_labels, k = 5)
 #confusion matrix
 confusionMatrix(Bank_test_pred, Bank_test_labels)
-#분석=> 정확도:약96%, 옳바르게 예측한 데이터:962개, 예측하지 못한 데이터:38개
+
+##분석
+##정확도:약96%
+##옳바르게 예측한 데이터:962개, 예측하지 못한 데이터:38개
+##sensitivity : 59%
+##specify:99%
 ```
 
 <br/>
@@ -151,6 +156,8 @@ confusionMatrix(test_pred, Bank_test_labels4)
 
 ##모델 정확도:96.7% 
 ##1000개의 데이터 중 잘못 예측한 데이터는 총 33개(가입->미가입:4, 미가입->가입:29)
+##sensitivity : 65%
+##specify:99%
 ```
 
 <br/>
