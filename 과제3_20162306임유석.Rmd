@@ -25,6 +25,7 @@ library(GGally)
 library(psych)
 library(caret)
 library(glmnet)
+library(leaps)
 ```
 
 ```{r graph1}
@@ -125,6 +126,12 @@ ggplot(fwd_model$results, aes(x=nvmax, y=RMSE)) + geom_point() + geom_line() + t
 coef_bwd_cv <- coef(bwd_model$finalModel, bwd_model$bestTune$nvmax)
 test_pred_bwd_cv <- test.mat[, names(coef_bwd_cv)] %*% coef_bwd_cv
 RMSE(test_pred_bwd_cv, climate_test$Temp)
+#test, train data를 모두 넣어 만든 final model
+climate = climate[c(-1,-2)]
+final_model = regsubsets(Temp~., data = climate, nvmax = 8, method="forward")
+coef_final = coef(final_model,7)
+#final model coefficient값
+coef_final
 ```
 ```{text}
 (a)forward와 backward selection 모두 7개의 feature를 선택하였다.

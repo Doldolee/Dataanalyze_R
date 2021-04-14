@@ -385,6 +385,7 @@ library(GGally)</code></pre>
 <pre class="r"><code>library(caret)
 library(glmnet)</code></pre>
 <pre><code>## Warning: package &#39;glmnet&#39; was built under R version 4.0.5</code></pre>
+<pre class="r"><code>library(leaps)</code></pre>
 <pre class="r"><code>climate = read.csv(&#39;ClimateChange.csv&#39;)[,c(-1,-2)]
 #모든 변수의 산점도
 ggpairs(climate[c(1:9)],title=&quot;모든 변수의 상관관계&quot;)+theme(axis.title.x=element_blank(),axis.text.x=element_blank(),axis.ticks.x=element_blank())</code></pre>
@@ -542,6 +543,16 @@ coef_bwd_cv &lt;- coef(bwd_model$finalModel, bwd_model$bestTune$nvmax)
 test_pred_bwd_cv &lt;- test.mat[, names(coef_bwd_cv)] %*% coef_bwd_cv
 RMSE(test_pred_bwd_cv, climate_test$Temp)</code></pre>
 <pre><code>## [1] 0.08359067</code></pre>
+<pre class="r"><code>#test, train data를 모두 넣어 만든 final model
+climate = climate[c(-1,-2)]
+final_model = regsubsets(Temp~., data = climate, nvmax = 8, method=&quot;forward&quot;)
+coef_final = coef(final_model,7)
+#final model coefficient값
+coef_final</code></pre>
+<pre><code>##   (Intercept)           MEI           CO2           N2O        CFC.11 
+## -1.276250e+02  6.624108e-02  5.176416e-03 -1.662986e-02 -7.260592e-03 
+##        CFC.12           TSI      Aerosols 
+##  4.298375e-03  9.581909e-02 -1.582997e+00</code></pre>
 <pre class="text"><code>(a)forward와 backward selection 모두 7개의 feature를 선택하였다.
 (b)forward 모델과 backward모델의 최적의 feature갯수는 모두 7개로 나왔으며 coefficient값 또한 동일하다. 더불어 각 model의 rusults를 본 결과 R^2도 가장 높게 나타났다. 그래서 CH4를 제외한 feature 7개를 가지는 모델을 bset모델로 결정한다.(feature은 MEI/CO2/N2O/CFC.11/CFC.12/TSI/Aerosols 이다.)</code></pre>
 <p><br /></p>
