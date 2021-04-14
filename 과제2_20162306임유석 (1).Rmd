@@ -1,0 +1,176 @@
+---
+title: "Assignment2"
+author: "crator-creator/20162306임유석"
+date: '2021 3 30 '
+output: html_document
+---
+
+<br/>
+
+### Common Bank Dataset
+
+<br/>
+
+#### 1. Target Variable분포 시각화
+
+<br/>
+
+
+```{r message=FALSE}
+# 사용할 패키지 추가
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(ggthemes)
+library(ggmap)
+library(class)
+library(caret)
+```
+
+```{r graph1}
+#파일 읽기
+Bank = read.csv('CommonBank.csv', stringsAsFactors=FALSE)
+#id와 zip.code삭제
+Bank = subset(Bank, select=-c(ID, ZIP.Code))
+#라벨링 칼럼 factor로 바꿈
+Bank$PersonalLoan = factor(Bank$PersonalLoan, levels=c(1,0), labels=c("가입","미가입"))
+#라벨링할 칼럼 삭제(z_normalized를 라벨링할 칼럼과 분리하여 적용하기 위함)
+Bank_n = subset(Bank, select=-c(PersonalLoan))
+#라벨링 칼럼 생성
+Bank_l = subset(Bank, select=c(PersonalLoan))
+#z_normalize-1
+z_normalize = function(x){
++ return ((x-mean(x))/sd(x))}
+#z_normalize-2// 두개의 방법 비교 결과 위에 함수식이 잘 동작한다는 것을 알 수 있음.(값이 길어 주석처리)
+#scale(Bank[1], center=TRUE, scale=TRUE)
+#z_normalize를 적용한 후 데이터프레임으로 변환
+bank_z=as.data.frame(lapply(Bank_n[1:11], z_normalize))
+#train, test dataset 분리
+Bank_train = bank_z[1:4000,]
+Bank_test = bank_z[4001:5000,]
+Bank_train_labels = Bank_l[1:4000,]
+Bank_test_labels =Bank_l[4001:5000,]
+
+#training dataset target variable 분포
+Bank_train_labelsv = as.data.frame(Bank_l[1:4000,])
+names(Bank_train_labelsv)=c("PersonalLoan")
+plotdata = count(Bank_train_labelsv, PersonalLoan)
+ggplot(plotdata, aes(x=PersonalLoan, y=n))+geom_bar(stat="identity")+labs(x="사품가입/미가입자수",y="count",title="train데이터 셋 상품 가입/미가입 현황")+geom_text(aes(label=n),vjust=-0.5)
+#test dataset target variable 분포
+Bank_test_labelsv= as.data.frame(Bank_l[4001:5000,])
+names(Bank_test_labelsv)=c("PersonalLoan")
+plotdata = count(Bank_test_labelsv, PersonalLoan)
+ggplot(plotdata, aes(x=PersonalLoan, y=n))+geom_bar(stat="identity")+labs(x="사품가입/미가입자수",y="count",title="test데이터 셋 상품 가입/미가입 현황")+geom_text(aes(label=n),vjust=-0.5)
+
+##2개의 타겟 변수의 분포를 보면 가입자수와 미가입자수 비율이 비슷함.
+```
+<br/>
+
+#### 2. 5-NN을 적용하고, 결과를 분석해보자
+
+<br/>
+
+
+```{r graph2}
+#knn모델
+Bank_test_pred <- knn(train = Bank_train, test = Bank_test, cl = Bank_train_labels, k = 5)
+#confusion matrix
+confusionMatrix(Bank_test_pred, Bank_test_labels)
+
+##분석
+##정확도:약96%
+##옳바르게 예측한 데이터:962개, 예측하지 못한 데이터:38개
+##sensitivity : 59%
+##specify:99%
+```
+
+<br/>
+
+#### 3. Training set 중에서 마지막 800명의 데이터를 validation set으로 사용하여, 다양한 k 값에 대해 k-NN을 적용해 보고 예측 성능을 비교해 보자. k가 어떤 값을 가질때 모델의 성능이 가장 우수한가?
+
+<br/>
+```{r graph3}
+#validation set을 포함하여 데이터 re-split
+Bank_train3 = bank_z[1:3200,]
+Bank_test3 = bank_z[4001:5000,]
+validation_set3 = bank_z[3201:4000,]
+Bank_train_labels3 = Bank_l[1:3200,]
+Bank_test_labels3 =Bank_l[4001:5000,]
+validation_set_labels3 = Bank_l[3201:4000,]
+
+#94.75
+Bank_test_pred3 <- knn(train = Bank_train3, test = validation_set3, cl = Bank_train_labels3, k = 3)
+confusionMatrix(Bank_test_pred3, validation_set_labels3)
+#95.25
+Bank_test_pred3 <- knn(train = Bank_train3, test = validation_set3, cl = Bank_train_labels3, k = 5)
+confusionMatrix(Bank_test_pred3, validation_set_labels3)
+#94.38
+Bank_test_pred3 <- knn(train = Bank_train3, test = validation_set3, cl = Bank_train_labels3, k = 7)
+confusionMatrix(Bank_test_pred3, validation_set_labels3)
+#94.62
+Bank_test_pred3 <- knn(train = Bank_train3, test = validation_set3, cl = Bank_train_labels3, k = 9)
+confusionMatrix(Bank_test_pred3, validation_set_labels3)
+#93.88
+Bank_test_pred3 <- knn(train = Bank_train3, test = validation_set3, cl = Bank_train_labels3, k = 11)
+confusionMatrix(Bank_test_pred3, validation_set_labels3)
+#93.62
+Bank_test_pred3 <- knn(train = Bank_train3, test = validation_set3, cl = Bank_train_labels3, k = 13)
+confusionMatrix(Bank_test_pred3, validation_set_labels3)
+#93.5
+Bank_test_pred3 <- knn(train = Bank_train3, test = validation_set3, cl = Bank_train_labels3, k = 15)
+confusionMatrix(Bank_test_pred3, validation_set_labels3)
+#93.38
+Bank_test_pred3 <- knn(train = Bank_train3, test = validation_set3, cl = Bank_train_labels3, k = 17)
+confusionMatrix(Bank_test_pred3, validation_set_labels3)
+#93.62
+Bank_test_pred3 <- knn(train = Bank_train3, test = validation_set3, cl = Bank_train_labels3, k = 19)
+confusionMatrix(Bank_test_pred3, validation_set_labels3)
+
+##k가 5의 값을 가질 때 모델의 성능이 가장 우수하다.
+```
+
+<br/>
+
+#### 4. Training set에 대해 5-fold cross validation을 5회 반복하여 best k 값을 찾아보자. Best k 값으로 만들어지는 최종 model에 test set을 적용하여 model의 성능을 report하자.
+
+<br/>
+
+```{r graph4}
+#train과 test dataset 분리
+Bank_train = Bank[1:4000,]
+Bank_test = Bank[4001:5000,]
+Bank_train_labels4 = Bank[1:4000,8]
+Bank_test_labels4 = Bank[4001:5000,8]
+#z-normalized
+z_normalized <- c("center", "scale")
+#cross validation
+cv <- trainControl(method="repeatedcv", number = 5, repeats = 5)
+#parameter tuning
+tune_grid <- expand.grid(k = seq(1, 99, 2))
+#knn모델 생성
+knn_fit = train(data=Bank_train, PersonalLoan~.,method="knn", trControl=cv,preProcess=z_normalized,tuneGrid=tune_grid )
+knn_fit
+#knn 시행결과 시각화(k=3인경우에 가장 높은 정확도가 나옴.)
+ggplot(knn_fit)+theme_bw()
+#최종 모델에 test set 적용
+test_pred = predict(knn_fit, Bank_test)
+confusionMatrix(test_pred, Bank_test_labels4)
+
+##모델 정확도:96.7% 
+##1000개의 데이터 중 잘못 예측한 데이터는 총 33개(가입->미가입:4, 미가입->가입:29)
+##sensitivity : 65%
+##specify:99%
+```
+
+<br/>
+
+#### 4. 3번과 4번에서 활용한 training 방식의 장단점을 비교해보자
+
+<br/>
+```{r graph5}
+#4번은 cross validation을 사용하여 dataset의 의존성을 줄임. 그 결과 정확도가 더 높음.
+#4번은 자동으로 parameter tuning을 시행함으로써 최적의 k값을 찾아줌. 하지만 3번은 직접 찾아야함.
+#3번은 train, validation, test 3가지 범주로 나눔으로써 모델의 완성도를 높임.
+#3번은 normalize함수를 직접 작성하여 data에 적용하였지만 4번은 간단하게 적용가능함.
+```
+
