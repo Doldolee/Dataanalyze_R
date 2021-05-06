@@ -1,0 +1,374 @@
+---
+title: "Assignment4"
+author: "crator-creator/20162306임유석"
+date: '2021 5 3 '
+output:
+  html_document: 
+    highlight: pygments
+---
+
+<br/>
+
+##  __1. Predicting Delayed Flights__
+
+항공기의 연착(delay) 여부를 예측하는 것은 항공사와 공항 등 항공기 운항과 관련된 주체들에게 매우 중요하다.
+항공기의 연착에 따라 대체 항공기 이용료, 숙박 비용, 공항 사용료 등의 비용 발생이 매우 크기 때문이다.
+FlightRecords.csv 파일은 2004년 1월동안 Washington, DC 지역으로부터 New York City로 운행한 2201개
+의 항공기 운행 기록을 포함한다. 본 문제에서는 다음 7개의 변수를 사용하여 항공기의 연착 여부를 예측해 본다.
+
+- dayweek: 운행 요일 (1: Mon, 2: Tue, …, 7: Sun)  
+- deptime: 출발시각 (예: 1455 = 14시55분, 839: 8시39분)  
+- origin: 출발공항코드(DCA: Reagan Nation, IAD: Dulles, BWI: Baltimore-Washington Int’l)  
+- dest: 도착공항코드(JFK: Kennedy, LGA: LaGuardia, EWR: Newark)  
+- carrier: 항공사코드(CO: Continental, DH: Atlantic Coast, DL: Delta, MQ: American Eagle  
+OH: Comair, RU: Continental Express, UA: United, US: USAirways)  
+- weather: 날씨 (0: OK, 1: Bad)
+- delay: 연착여부(“delayed” or “ontime”)  
+<br/>
+
+```{r message=FALSE}
+# 사용할 패키지 추가
+library(ggplot2)
+library(psych)
+library(caret)
+library(e1071)
+library(rsample)
+library(ISLR)
+library(glmnet)
+library(ROCR)
+```
+
+<br/>
+
+### 1-1. 다음의 순서로 data preprocessing을 진행하자.
+
+- 항공기 출발시각(deptime)이 6시 이전이거나 22시 이후인 데이터는 빈도 수가 매우 적으므로 데이
+터셋에서 제외시킨다.
+- 수치값으로 표현되어 있는 출발시각을 6시부터 22시까지 각 시간대를 나타내는 범주형 변수로 변환
+한다 (Hint: 원 데이터를 100으로 나눈 후 정수값으로 내림. 그 후 factor로 변환)
+- 수치값으로 표현되어 있는 dayweek와 weather 변수를 factor로 변환한다.
+- factor로 표현되어 있는 delay 변수가 가지는 level의 순서를 “ontime”, “delayed” 순으로 변환한
+다 (logistic regression 수행 시에 연착하는 경우를 로 만들기 위해서).
+
+```{r graph0}
+#데이터 읽기
+records = read.csv("./data/FlightRecords.csv")
+#6시 이전, 22시 이후 데이터 제외
+records=records[records$deptime>600 & records$deptime < 2300, ]
+#출발시각 전처리
+records$deptime=as.factor(floor(records$deptime/100))
+#factor
+records$dayweek = as.factor(records$dayweek)
+records$weather = as.factor(records$weather)
+#target feature 전처리
+records$delay = factor(records$delay, level=c("ontime","delayed"), labels=c("ontime","delayed"))
+#필요없는 feature 제외
+records=records[-c(1,5,6,7,11,12)]
+```
+
+<br/>
+
+### 1-2. 요일 별 연착비율, 출발 시간대 별 연착 비율, 출발 공항 별 연착비율, 도착 공항 별 연착 비율, 항공사 별 연착비율, 날씨 별 연착 비율을 각각 그래프로 시각화해보자. 어떤 특성을 관찰할 수 있는가?
+
+```{r graph1}
+#요일별 연착비율
+ggplot(records, aes(x=factor(dayweek,levels=c(1,2,3,4,5,6,7),labels=c("Mon","Tue","Wed","Thu","Fri","Sat","Sun")), fill=delay))+ geom_bar(position="fill")+labs(x="Dayweek",y="proportion",title="delay by Dayweek")+scale_fill_brewer(palette="Set2")+theme_minimal()
+```  
+
+- ontime의 비율이 delayed 비율에 비해서 더 높으며 요일별delay여부가 고르게 분포되어있다.
+
+```{r graph2}
+#출발 시간대 별 연착 비율
+ggplot(records, aes(x=factor(deptime,levels=c(6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22),labels=c("6시","7시","8시","9시","10시","11시","12시","13시","14시","15시","16시","17시","18시","19시","20시","21시","22시")), fill=delay))+ geom_bar(position="fill")+labs(x="Deptime",y="proportion",title="delay by Deptime")+scale_fill_brewer(palette="Set2")+theme_minimal()
+```  
+
+- 대체로 시간이 지날 수록 delayed의 비율이 증가하며 특히 22시에는 모든 비행기가 delayed되었다.
+
+```{r graph3}
+#출발 공항 별 연착비율
+ggplot(records, aes(x=origin, fill=delay))+ geom_bar(position="fill")+labs(x="출발공항코드",y="proportion",title="delay by Origin")+scale_fill_brewer(palette="Set2")+theme_minimal()
+```  
+
+- 대체로 ontime의 비율이 delayed 비율보다 높게 나타나며 출발공항별 delay 비율은 DCA공항이 약간 작으나 비슷하게 나타난다.
+
+```{r graph4}
+#도착 공항 별 연착비율
+ggplot(records, aes(x=dest, fill=delay))+ geom_bar(position="fill")+labs(x="도착공항코드",y="proportion",title="delay by Dest")+scale_fill_brewer(palette="Set2")+theme_minimal()
+```  
+
+- 대체로 ontime의 비율이 delayed 비율보다 높게 나타나며 도착공항별 delay 비율은 LGA공항이 약간 작으나 비슷하게 나타난다.
+
+```{r graph5}
+#항공사 별 연착비율
+ggplot(records, aes(x=carrier, fill=delay))+ geom_bar(position="fill")+labs(x="항공사코드",y="proportion",title="delay by Carrier")+scale_fill_brewer(palette="Set2")+theme_minimal()
+```  
+
+- 대체로 ontime의 비율이 delayed 비율보다 높게 나타나며 DL,OH,US항공사가 delayed비율이 비교적 적다.
+
+```{r graph6}
+#날씨 별 연착비율
+ggplot(records, aes(x=factor(weather,level=c(0,1),labels = c("Ok","Bad")), fill=delay))+ geom_bar(position="fill")+labs(x="날씨",y="proportion",title="delay by Weather")+scale_fill_brewer(palette="Set2")+theme_minimal()
+```  
+
+- 날씨가 좋지 않을 경우 100% delayed된다.
+
+<br/>
+
+### 1-3. 7개의 모든 변수들 간의 상관관계를 시각화해보자. 어떤 특성을 관찰할 수 있는가?
+
+```{r graph7}
+#모든 변수 상관관계 시각화
+pairs.panels(records)
+```
+
+- 모든 변수와 타겟 변수와의 상관관계가 비교적 낮음. 하지만 날씨 데이터와 타겟변수의 상관관계는 6개의 feature 변수 중 가장 높음.
+- 각 feature들 변수 사이의 상관관계도 비교적 낮으나 carrier 와 origin은 그 중 음의 상관관계를 보임.
+
+<br/>
+
+### 1-4. 데이터셋을 70:30 비율로 training set과 test set으로 분할하자. 이때 stratified sampling을 활용하여 두 set에서 delay 변수의 분포가 크게 차이가 없도록 분할하자
+
+```{r graph8}
+#데이터 분할
+set.seed(123)
+split = initial_split(records, prop=0.7, strat="delay")
+train = training(split)
+test = testing(split)
+```
+
+<br/>
+
+### 1-5. 데이터시각화로부터 weather 변수가 “Bad” 인 경우에는 항상 항공기가 연착되는 것을 관찰할 수 있다. 따라서 weather가 Bad이면 항공기가 연착되고, weather가 OK일 경우 항공기가 연착되지 않는 것으로 예측하는 단순한모델을 baseline model이라 하자. Test set에 대해 baseline model을 적용했을 때 confusion matrix를 계산해 보세요
+
+```{r graph9}
+#baseline model
+pred_base = factor(test$weather, levels=c(0,1), labels=c("ontime","delayed"))
+confusionMatrix(pred_base, test$delay, positive="ontime")
+```
+
+- weather feature을 가지고 예측하였을 때 116개의 데이터를 분류하지 못하였다.
+- 정확도는 약 82%를 보인다.
+- sensitivity는 1.0이며 specificity는 0.07937이며 이는 matrix에서 부정을 걸러내지 못한것을 통해 알 수 있다.
+
+<br/>
+
+### 1-6.  Training set을 대상으로, 연착여부(delay)를 나머지 모든 변수를 사용하여 예측하기 위한 logistic regression model을 수립해보자. 
+```{r graph10}
+#모델 생성
+model = glm(delay~., data=train, family="binomial")
+summary(model)
+```
+
+#### 1-6-1. 변수 deptime19의 regression coefficient에 대한 추정값은 얼마인가? 이 추정값을 바탕으로 출발시각이 19시대인 항공기에 대해서 어떠한 해석을 할 수 있는가?
+
+- deptime19의 베타 추정값은 2.64120이다. 
+- 추정값이 양수이므로 deptime19가 증가할 수록 delay확률이 증가하며 그 정도는 2.64120이다.
+
+#### 1-6-2. 날씨에 문제가 없는 금요일 15시에 IAD에서 출발하여 JFK로 도착한 Delta 항공기가 연착될 확률은 얼마로 예측되는가?
+```{r graph11}
+#데이터 생성
+#test데이터를 하나 가져와서 조건에 맞게 값 수정
+test_A = test[1,]
+test_A[1,]=c("DL", 15, "JFK","IAD",0,5,"delayed")
+#예측
+predict(model, test_A, type="response")
+```
+
+- 위 조건을 만족한 data의 확률은 약 33%로 예측된다.
+
+#### 1-6-3. Threshold 에 대해서 각각 test set에 대한 confusion matrix를 계산해 보자. 어떠한 경향을 관찰할 수 있는가?
+```{r graph12}
+#t=0.2
+test_prob = predict(model, test, type="response")
+test_pred = rep("ontime",651)
+test_pred[test_prob > 0.2] = "delayed"
+confusionMatrix(factor(test_pred, levels=c("ontime","delayed")), test$delay, positive="delayed")
+```
+```{r graph13}
+#t=0.3
+test_pred = rep("ontime",651)
+test_pred[test_prob > 0.3] = "delayed"
+confusionMatrix(factor(test_pred, levels=c("ontime","delayed")), test$delay, positive="delayed")
+```
+```{r graph14}
+#t=0.5
+test_pred = rep("ontime",651)
+test_pred[test_prob > 0.5] = "delayed"
+confusionMatrix(factor(test_pred, levels=c("ontime","delayed")), test$delay, positive="delayed")
+```
+```{r graph15}
+#t=0.7
+test_pred = rep("ontime",651)
+test_pred[test_prob > 0.7] = "delayed"
+confusionMatrix(factor(test_pred, levels=c("ontime","delayed")), test$delay, positive="delayed")
+```
+
+- t 의 값이 0.5인경우 가장 높은 정확도를 보이고(0.7인경우도 유사함.) 대체로 0.2에서 높아질 수록 정확도가 증가한다.
+- t 값의 증가할 때 sensitivity 와 specificity는 trade-off 관계에 있음을 알 수 있다.
+
+#### 1-6-4. Baseline model과 logistic regression model의 성능을 비교해보자.
+
+- Baseline model 의 정확도는 약 82%, logistic regression model의 정확도는(t=0.5) 약 83%로 logistic model이 1%더 높다.
+- logistic 모델이 근소하게 정확도가 높으나 feature의 갯수가 baseline model에 비해 6개 많이 사용되었으므로 더 간단하면서 성능이 높은것은 baseline model이라고도 할 수 있다.
+
+<br/>
+
+### 1-7.Training set을 대상으로, step() 함수를 활용한 backward stepwise selection을 적용하여 logistic regression model을 수립해보자
+```{r graph16}
+#backward selection
+set.seed(123)
+model_step = step(model, direction="backward")
+#상관계수
+coef(model_step)
+#확률
+prob_step = predict(model_step, test, type="response")
+#threshold값 을 통한 test데이터 예측
+pred_step = rep("ontime",651)
+pred_step[prob_step>0.5] = "delayed"
+confusionMatrix(factor(pred_step),test$delay, positive = "delayed")
+```
+- 모델에는 carrier, deptime, origin, weather, dayweek가 포함되었다(dummy변수로 여러개가 생성되어 실제 X는 32개).
+- 모델의 정확도는 0.8326이다.
+
+<br/>
+
+### 1-8. Training set을 대상으로 Lasso regression을 적용하여 logistic regression model을 수립해보자. CV의결과 바탕으로 모델에 포함되는 feature의 수와 예측정확도를 모두 고려했을 때 적합한 모델을 선택하자
+
+```{r graph17}
+#lassso에 맞는 데이터 생성
+trainx = model.matrix(delay~., data=train)
+trainy = train$delay
+set.seed(123)
+#lasso regression 수행, auc기반
+cv_lasso = cv.glmnet(x=trainx, y = trainy, alpha=1, family="binomial",type.measure = "auc", nfolds = 10)
+#시각화
+plot(cv_lasso)
+#최적의 lambda
+lambda  = cv_lasso$lambda[19]
+coef(cv_lasso, s = lambda)
+#선택한 모델을 활용한 확률
+pred_prob = predict(cv_lasso, newx=model.matrix(delay~.,data=test), s= lambda, type="response")
+#선택한 모델을 활용한 분류 
+pred_class = predict(cv_lasso, newx=model.matrix(delay~.,data=test), s= lambda, type="class")
+#test 예측 결과 출력
+confusionMatrix(factor(pred_class, levels=c("ontime","delayed")),test$delay,positive="delayed")
+```
+
+- 14개의 변수가 포함되었을 때 모델의 AUC값이 bestmodel과 큰 차이가 없으므로 14개 변수 포함된 모델 선택.
+- 모델에는 carrier[DL,US], deptime[8,10,12,14,15,19,20,22], originDCA, weather1, dayweek[6,7]이 포함되어있다.
+- confusionMatrix결과 testset에 대한 정확도는 0.8295이다.
+
+<br/>
+
+### 1-9. 6, 7, 8번에서 수립한 logistic regression model들에 대해서, test set에 대한 성능을 나타내는 ROC Curve를 하나의 그래프로 시각화하고, AUC값을 비교해 보자.
+```{r graph18}
+#각 모델의 확률
+test_prob = predict(model, test, type="response")
+prob_step = predict(model_step, test, type="response")
+pred_prob = predict(cv_lasso, newx=model.matrix(delay~.,data=test), s= lambda, type="response")
+#각 모델의 test셋 예측결과 및 ROC커브를 위한 계산 결과
+pred1 = prediction(test_prob, test$delay, c("ontime","delayed"))
+perf1 = performance(pred1, measure="tpr",x.measure = "fpr")
+pred2 = prediction(prob_step, test$delay, c("ontime","delayed"))
+perf2 = performance(pred2, measure = "tpr", x.measure = "fpr")
+pred3 = prediction(pred_prob, test$delay, c("ontime","delayed"))
+perf3= performance(pred3, measure = "tpr", x.measure = "fpr")
+#ROC 커브 시각화
+plot(perf1, col="darkred", lwd=3)
+plot(perf2, col="darkblue", lwd=3, add=TRUE)
+plot(perf3, col="darkgreen", lwd=3, add=TRUE)
+#각 모델별 auc 계산
+auc1 = performance(pred1, measure = "auc")
+auc2 = performance(pred2, measure = "auc")
+auc3 = performance(pred3, measure = "auc")
+auc1@y.values
+auc2@y.values
+auc3@y.values
+```
+<br/>
+
+|모델|AUC|
+|------|---|
+|6번모델|0.729811|
+|7번모델|0.7342101|
+|8번모델|0.7238398|
+
+- AUC는 7번 모델이 가장 높으나 대체로 비슷하다.
+
+<br/>
+
+### 1-10. Training set을 대상으로 k-nn을 적용해보자. 이때 train() 함수를 사용한 cross validation으로 Accuracy가 가장 높은 best 값을 찾는다. 
+```{r graph19}
+#라벨 분리
+train_labels = train[,7]
+test_labels=test[,7]
+#z_normalized, 5fold,5repeat cv시행
+z_normalized = c("center","scale")
+cv <- trainControl(method="repeatedcv", number = 5, repeats = 5)
+tune_grid <- expand.grid(k = seq(1, 99, 2))
+#훈련
+knn_fit = train(data=train, delay~., method="knn", trControl = cv, 
+preProcess = z_normalized, tuneGrid = tune_grid)
+#knn 시각화
+ggplot(knn_fit)+theme_bw()
+#best k 값
+knn_fit$bestTune
+#test set 예측
+test_pred <- predict(knn_fit, test)
+confusionMatrix(test_pred, test_labels, positive="delayed")
+```
+
+- best k는 9 이다.
+- knn 모델의 정확도는 0.8541로 앞서 수립한 모델보다 약 2% 정도 더 높은 정확도를 보인다.
+
+<br/>
+
+## 2. OJ DATASET
+
+```{r graph20}
+#데이터 셋 생성 및 분할
+data = OJ
+set.seed(123)
+split = initial_split(data, prop=0.7, strat="Purchase")
+train = training(split)
+test = testing(split)
+#linear kernel
+set.seed(123)
+tune.out = tune(svm, Purchase~., data=train, kernel = "linear", ranges=list(cost=10^seq(-3,3)))
+summary(tune.out)
+#베스트 모델
+bestmodel = tune.out$best.model
+#예측
+pred = predict(bestmodel, test)
+#메트릭스
+confusionMatrix(pred, test$Purchase)
+#RBF kernel
+set.seed(123)
+tune.out1 = tune(svm, Purchase~.,data=train, kernel="radial", ranges=list(cost=c(0.01,0.1,1,10,100,1000), gamma=c(0.01,0.1,1,10,100)))
+summary(tune.out1)
+#베스트 모델
+bestmodel1 = tune.out1$best.model
+#예측
+pred1 = predict(bestmodel1, test)
+#메트릭스
+confusionMatrix(pred1, test$Purchase)
+#plynomial kernel
+set.seed(123)
+tune.out2 = tune(svm, Purchase~.,data=train, kernel="polynomial", ranges=list(cost=c(0.1,1,10,100,1000), degree=c(2,3,4)))
+summary(tune.out2)
+#베스트 모델
+bestmodel2 = tune.out2$best.model
+#예측
+pred2 = predict(bestmodel2, test)
+#메트릭스
+confusionMatrix(pred2, test$Purchase)
+```
+<br/>
+
+|kernel|Accuracy|
+|------|---|
+|linear|0.8188|
+|RBF|0.8219|
+|polynomial|0.7812|
+
+- svm모델중 가장 좋은 성능을 보이는 것은 RBF kernel을 사용했을 때이다. 하지만 linear kernel과의 정확도에 크게 차이가 나지 않으므로 적절한 경우에 linear kernel model을 사용하여도 된다고 생각된다. 
