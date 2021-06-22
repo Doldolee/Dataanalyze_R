@@ -31,7 +31,7 @@ library(ROCR)
 
 ### 1. 모델을 수립하기 전에 데이터의 특성을 분석한다. 시각화 도구를 적절히 활용하자.
 
-```{r graph0}
+```{r graph1}
 data = read.csv("./data/Tweets_win.csv", stringsAsFactors = FALSE)
 #감정 분포 및 항공사별 데이터 분포 확인
 ggplot(data,aes(x=airline_sentiment,fill=airline))+geom_bar()+geom_text(aes(label=..count..),stat='count',position=position_stack(0.5))+labs(title="감정분포 및 항공사별 데이터 분포")
@@ -51,7 +51,7 @@ wordcloud(neutral$text, max.words = 40, colors=brewer.pal(8,"Dark2"))
 
 ### 2. 텍스트 데이터에 bag-of-words 기법을 적용하기 위해 적절한 preprocessing을수행하고, 그 결과를 분석해보자
 
-```{r graph1}
+```{r graph2}
 data$airline_sentiment = factor(data$airline_sentiment)
 #corpus화
 sent_corpus = VCorpus(VectorSource(data$text))
@@ -77,7 +77,7 @@ sent_corpus_clean <- tm_map(sent_corpus_clean, stripWhitespace)
 
 #### A. DTM을 사용하여 각 모델에 적용한다. 
 ##### A-1. DTM을 이용한 데이터셋 생성
-```{r graph2}
+```{r graph3}
 #DTM생성
 sent_DTM = DocumentTermMatrix(sent_corpus_clean)
 #DTM에서 발생빈도가 적은 단어 제외
@@ -90,11 +90,10 @@ sent$type = data$airline_sentiment
 train = sent[1:5000,]
 test = sent[5001:14640,]
 ```
-
 <br/>
 
 ##### A-2. multinomial Logistic Regression
-```{r graph3}
+```{r graph4}
 #positive를 기준 변수로 사용
 train$type <- relevel(train$type, "positive")
 #다항 로지스틱 회귀모델
@@ -117,7 +116,8 @@ round((sum(diag(ctable1))/sum(ctable1))*100,2)
 
 <br/>
 
-```{r graph4}
+```{r graph5}
+#테스트 확률 및 분류 예측
 prediction2_prob=predict(mlogit, newdata = test, "prob")
 prediction2 = predict(mlogit, newdata = test, "class")
 #test table 분류 결과 테이블
@@ -138,10 +138,13 @@ round((sum(diag(ctable2))/sum(ctable2))*100,2)
 <br/>
 
 ##### A-3. Random Forest
-```{r graph5}
+```{r graph6}
+#tree가 50인 포레스트 모델 생성
 set.seed(123)
 rf <- randomForest(type~., data=train, ntree=50)
+#test 분류 예측
 rf_pred1 <- predict(rf, newdata=test, type="class")
+#결과 메트릭스 출력
 confusionMatrix(rf_pred1, test$type, positive = "positive")
 ```
 
@@ -154,33 +157,7 @@ confusionMatrix(rf_pred1, test$type, positive = "positive")
 
 <br/>
 
-
-```{r graph5.5}
-#feature의 수를 20개로 줄임
-sent_DTM3 <- removeSparseTerms(sent_DTM, 0.85)
-sent1 <- data.frame(as.matrix(sent_DTM3))
-#feature 이름 조정
-colnames(sent1) <- make.names(colnames(sent1))
-#target변수 추가
-sent1$type = data$airline_sentiment
-train1 = sent1[1:5000,]
-test1 = sent1[5001:14640,]
-
-set.seed(123)
-#feature의 수를 줄이고 트리의 수를 6배 늘려 randomforest실행
-rf <- randomForest(type~., data=train1, ntree=300)
-#test 데이터 값 예측
-rf_pred1 <- predict(rf, newdata=test1, type="class")
-confusionMatrix(rf_pred1, test1$type, positive = "positive")
-```
-
-<br/>
-
-- feature의 수를 너무 많이 줄이면 정확도가 급격히 떨어진다.
-
-<br/>
-
-```{r graph6}
+```{r graph7}
 #feature의 수를 반정도 줄임.
 sent_DTM3 <- removeSparseTerms(sent_DTM, 0.99)
 sent1 <- data.frame(as.matrix(sent_DTM3))
@@ -196,22 +173,26 @@ set.seed(123)
 rf <- randomForest(type~., data=train1, ntree=300)
 #test 데이터 값 예측
 rf_pred1 <- predict(rf, newdata=test1, type="class")
+#분류 결과 출력
 confusionMatrix(rf_pred1, test1$type, positive = "positive")
 ```
 
 <br/>
 
-- feature의 수를 줄이고 tree의 수를 증가시켰지만 test셋에 대한 정확도는 71.24%로 크게 차이가 나지 않는다.
+- 처음에는 모델의 학습 시간이 상당히 오래걸려 feature의 수를 20개로 줄였더니 정확도가 40%로 낮아졌다. feature가 많을 수록 정확도가 높지만 적절한 수의 feature가 필요하며 테스트 결과 비율을 0.99로 하였다. 
+- feature의 수를 줄이고 tree의 수를 증가시켰지만 test셋에 대한 정확도는 71.24%로 크게 차이가 나지 않는다. 
 - 시간이 걸려도 tree의 수의 증가에 따른 정확도 향상 효과가 있는지 확인을 위해 feature의 수를 줄이지 않은 상태에서 트리의 수를 늘려 결과를 확인해본다.
 
 <br/>
 
-```{r graph7}
-#트리가 300개인 모델 생성
+```{r graph8}
+#tree가 300인 랜덤포레스트 모델 생성
 set.seed(123)
 rf <- randomForest(type~., data=train, ntree=300)
+#test 데이터 확률 및 분류 예측
 rf_prob <- predict(rf, newdata=test, type="prob")
 rf_pred1 <- predict(rf, newdata=test, type="class")
+#분류 결과 출력
 confusionMatrix(rf_pred1, test$type, positive = "positive")
 ```
 
@@ -223,8 +204,8 @@ confusionMatrix(rf_pred1, test$type, positive = "positive")
 
 <br/>
 
-```{r graph8}
-#MAE와 모델에 영향을 많이 준 feature 확인
+```{r graph9}
+#MAE값과 영향을 많이주는 feature 선별
 MAE(as.numeric(rf_pred1), as.numeric(test$type)) 
 vip(rf)
 ```
@@ -235,10 +216,9 @@ vip(rf)
 - 모델에 영향을 많이 미치는 feature는 thank,unit이 있다.
 
 ##### A-4. SVM model
-
 <br/>
 
-```{r graph9}
+```{r graph10}
 #svm모델
 set.seed(123)
 tune.out = tune(svm, type~., data=train1, kernel="radial",  ranges=list(cost=c(1,10),  gamma=c(0.1,1)), scale=FALSE)
@@ -250,6 +230,7 @@ summary(tune.out)
 pred2 <- predict(x.svm,type="prob", newdata=test1, probability = TRUE)
 confusionMatrix(pred2, test$type)
 ```
+
 <br/>
 
 - svm모델을 학습시키는 시간이 한 번 돌릴 때 10분이상 소비되어 다양한 파라미터 튜닝을 하기에는 제한되었다.
@@ -257,15 +238,17 @@ confusionMatrix(pred2, test$type)
 - cost와 gamma를 각각 1,10 / 0.1,1을 주고 분석한 결과 best parameter는 차례대로 1과 0.1이 나왔다. 
 - sensitivity를 분석한 결과 대체로 neutral 데이터를 잘 분류해내지 못한다.
 
+<br/>
+
 ##### A-5. 각 모델의 성능 비교 with ROC Curve
-```{r graph10}
+```{r graph11}
 #logistic regression ROC curve
-multiclass.roc(test$type,prediction2_prob ,plot=TRUE)
+multiclass.roc(test$type,prediction2_prob)
 #Random Forest ROC curve
-multiclass.roc(test$type,rf_prob ,plot=TRUE)
+multiclass.roc(test$type,rf_prob)
 #svm ROC curve
 pred3=attr(pred2, "probabilities")
-multiclass.roc(test$type,pred3 ,plot=TRUE)
+multiclass.roc(test$type,pred3)
 ```
 <br/>
 
@@ -288,26 +271,24 @@ multiclass.roc(test$type,pred3 ,plot=TRUE)
 - svm모델과 FOrest모델은 큰 차이는 없지만 정확도는 조금더 svm모델이 높다.
 - 대체적으로 성능의 한계로 parameter tuning을 효과적으로 하지못하여 정확도에 향상에 한계를 보였다.
 
-<br/>
-
 #### B. TF-IDF을 사용하여 각 모델에 적용한다. 
 ##### B-1. TF-IDF를 이용한 데이터셋 생성
-```{r graph11}
-#TF-IDF행렬 생성
+```{r graph12}
+#TF-IDF메트릭스 생성
 sent_tfidf <- weightTfIdf(sent_DTM)
-#점수가 적은 단어 제거
+#TF-IDF점수에 따라 feature 제거
 sent_dfidf <- removeSparseTerms(sent_tfidf, 0.995)
-#데이터 프레임 생성
+#데이터프레임 생성
 sent <- data.frame(as.matrix(sent_dfidf))
-colnames(sent) <- make.names(colnames(sent))
 #train, test 데이터 셋 생성
+colnames(sent) <- make.names(colnames(sent))
 sent$type <- data$airline_sentiment
 train = sent[1:5000,]
 test = sent[5001:14640,]
 ```
 
 ##### B-2. multinomial Logistic Regression
-```{r graph12}
+```{r graph13}
 #positive를 기준 변수로 사용
 train$type <- relevel(train$type, "positive")
 #다항 로지스틱 회귀모델
@@ -330,8 +311,8 @@ round((sum(diag(ctable1))/sum(ctable1))*100,2)
 
 <br/>
 
-```{r graph13}
-#test 데이터 예측
+```{r graph14}
+#test 데이터 확률 및 분류 예측
 prediction2_prob=predict(mlogit, newdata = test, "prob")
 prediction2 = predict(mlogit, newdata = test, "class")
 #test table 분류 결과 테이블
@@ -351,45 +332,45 @@ round((sum(diag(ctable2))/sum(ctable2))*100,2)
 <br/>
 
 ##### B-3. Random Forest
-```{r graph14}
-#트리의 수가 50인 모델 생성
+```{r graph15}
+#tree가 50인 포레스트 모델 생성
 set.seed(123)
 rf <- randomForest(type~., data=train, ntree=50)
-#class분류 예측
+#test 데이터 class 예측
 rf_pred1 <- predict(rf, newdata=test, type="class")
-#test데이터 예측결과
+#test 데이터 분류 매트릭스
 confusionMatrix(rf_pred1, test$type, positive = "positive")
 ```
 
 <br/>
 
-- 튜닝을 하지 않은 랜덤포레스트 모델의 test데이터 정확도는 71.94%이다. 
+- 튜닝을 하지 않은 랜덤포레스트 모델의 test데이터 정확도는 72.39%이다. 
 - 정확도가 어느정도 높은것으로 볼 때 파라미터 튜닝을 한다면 더 높은 정확도를 보일 것이다.
 - mtry를 조정하여 feature의수를 조정하는대신 전처리 과정에서 feature수를 조정하였다.
 
 <br/>
 
-```{r graph15}
+```{r graph16}
 set.seed(123)
 #트리의 수를 6배 늘려 randomforest실행
 rf <- randomForest(type~., data=train, ntree=300)
 #test 데이터 값 예측
 rf_prob <- predict(rf, newdata=test, type="prob")
-#class 분류 예측
 rf_pred1 <- predict(rf, newdata=test, type="class")
-#test데이터 예측결과
+#test 데이터 분류 매트릭스
 confusionMatrix(rf_pred1, test$type, positive = "positive")
 ```
 
 <br/>
 
-- tree의 수를 증가시켰지만 test셋에 대한 정확도는 72.24%로 크게 차이가 나지 않는다.
+- tree의 수를 증가시켰지만 test셋에 대한 정확도는 72.39%로 크게 차이가 나지 않는다.
 - DTM과 비교하여 크게 정확도가 향상되지는 않았다.
 
 <br/>
 
 
-```{r graph16}
+```{r graph17}
+#MAE와 영향을 미치는 feature 탐색
 MAE(as.numeric(rf_pred1), as.numeric(test$type)) 
 vip(rf)
 ```
@@ -400,11 +381,10 @@ vip(rf)
 - 모델에 영향을 많이 미치는 feature는 thank,unit으로 동일하다.
 
 ##### B-4. SVM model
-
 <br/>
 
-```{r graph17}
-#svm모델
+```{r graph18}
+#svm모델, kernel은 가장효과가 좋은 RBF kernel 사용
 set.seed(123)
 tune.out = tune(svm, type~., data=train, kernel="radial",  ranges=list(cost=c(1,10),  gamma=c(0.1,1)), scale=FALSE)
 #cost, gamma결과 확인
@@ -424,14 +404,14 @@ confusionMatrix(pred2, test$type)
 - DTM과 비교하여 크게 성능이 증가하지는 않았다.
 
 ##### B-5. 각 모델의 성능 비교 with ROC Curve
-```{r graph18}
+```{r graph19}
 #logistic regression ROC curve
-multiclass.roc(test$type,prediction2_prob ,plot=TRUE)
+multiclass.roc(test$type,prediction2_prob)
 #Random Forest ROC curve
-multiclass.roc(test$type,rf_prob ,plot=TRUE)
+multiclass.roc(test$type,rf_prob)
 #svm ROC curve
 pred3=attr(pred2, "probabilities")
-multiclass.roc(test$type,pred3 ,plot=TRUE)
+multiclass.roc(test$type,pred3)
 ```
 <br/>
 
@@ -451,19 +431,17 @@ multiclass.roc(test$type,pred3 ,plot=TRUE)
 |Random forest|72%|0.8218|
 |SVM|73%|0.8287|
 
-- DTM을 사용했을 때와 정확도는 조금 높게 나왔으나 모델의 성능이 크게 차이나지 않았다. 
+- DTM을 사용했을 때와 모델의 성능이 크게 차이나지 않았다. 
 
 <br/>
 
 ### 4. 전체 결론
-
 <br/>
 
-- __최종적으로 선택한 모델은 SVM모델이며 test set에 대한 정확도는 약73%이다.__
+- __최종적으로 선택한 모델은 SVM모델이며 test set에 대한 정확도는 73%이다.__
 - __전체 모델은 대체적으로 neutral 데이터와 positive데이터를 잘 분류해내지 못하였으며 특히 neutral데이터를 잘 분류해내지 못하였다. 부정과 긍정은 단어의 특색이 뚜렸히 들어나는 것에 비해 중립은 그렇지 않기 때문에 나타나는 결과로 보이며 data자체의 양이 negative 데이터에 집중되어있어 negative분류 결과 좋은것으로 고려된다.__
+- __데이터 수를 더 늘리고 input데이터의 라벨링 분포가 더 고르게 되어있었다면 훨씬 좋은 정확도가 측정되었을 것이라고 생각된다.__
 
-- 모델의 DTM메트릭스에서 feature 수를 조정해서 모델을 만들어본 결과 feature의 수를 약 20개로 줄여보았을 때 모델 학습속도는 급격히 상승하였지만  test 데이터 정확도가 약 40%로 급격히 떨어지는 것을 확인가능하였다.
+
 - Logistic regression, RandomForest, SVM모델을 이용하여 분석을 실시한 결과 비교적 Random Forest 모델과 SVM모델의 정확도가 높게 형성되었다.
 - Random Forest모델과 Svm모델은 parameter 값에 따라 성능이 좌우지 될 수 있는 모델이지만 상황적 한계로 충실히 이행하지 못하였다. 
-
-
